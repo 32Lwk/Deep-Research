@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - Yossy Portal</title>
+    <script nonce="prhlgCcCKIB2N1WAiyRk1g">
+    (function(){var t=localStorage.getItem("portal-theme");if(!t)t=window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)})();
+    </script>
+    <link rel="stylesheet" href="/portal-assets/portal.css">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--p-bg-secondary);
+        }
+        .login-card {
+            background: var(--p-surface);
+            border: 0.5px solid var(--p-border-light);
+            border-radius: var(--p-radius-lg);
+            padding: 3rem 2.5rem;
+            width: 100%;
+            max-width: 380px;
+            box-shadow: var(--p-card-shadow);
+        }
+        .login-card h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.25rem;
+        }
+        .login-subtitle {
+            color: var(--p-text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+        .login-tabs {
+            display: flex;
+            border-bottom: 1px solid var(--p-border-light);
+            margin-bottom: 1.5rem;
+            gap: 0;
+        }
+        .login-tab {
+            flex: 1;
+            padding: 0.6rem 0;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--p-text-tertiary);
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            cursor: pointer;
+            transition: color var(--p-transition), border-color var(--p-transition);
+            font-family: var(--p-font);
+        }
+        .login-tab.active {
+            color: var(--p-accent);
+            border-bottom-color: var(--p-accent);
+        }
+        .login-tab:hover:not(.active) {
+            color: var(--p-text-secondary);
+        }
+        .login-card button[type="submit"] {
+            width: 100%;
+            margin-top: 1.5rem;
+            padding: 0.7rem;
+            background: var(--p-accent);
+            color: var(--p-accent-text);
+            border: none;
+            border-radius: var(--p-radius-sm);
+            font-size: 1rem;
+            font-weight: 500;
+            font-family: var(--p-font);
+            cursor: pointer;
+            transition: background var(--p-transition);
+        }
+        .login-card button[type="submit"]:hover {
+            background: var(--p-accent-hover);
+        }
+        .login-error {
+            color: var(--p-danger);
+            font-size: 0.85rem;
+            margin-top: 0.5rem;
+        }
+        .login-links {
+            display: block;
+            text-align: center;
+            margin-top: 1.25rem;
+            font-size: 0.85rem;
+            color: var(--p-text-tertiary);
+        }
+        .login-links a {
+            color: var(--p-accent);
+            text-decoration: none;
+        }
+        .login-links a:hover {
+            text-decoration: underline;
+        }
+        .login-theme {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+        }
+        .login-pane { display: none; }
+        .login-pane.active { display: block; }
+        .field-group { margin-bottom: 0.75rem; }
+    </style>
+</head>
+<body>
+    <div class="login-theme">
+        <button class="portal-theme-toggle" aria-label="テーマ切替">&#9790;</button>
+    </div>
+
+    <div class="login-card">
+        <h1>Yossy Portal</h1>
+        <p class="login-subtitle">ログイン</p>
+
+        <div class="login-tabs">
+            <button class="login-tab" data-tab="student" id="tab-student">生徒</button>
+            <button class="login-tab" data-tab="staff" id="tab-staff">スタッフ</button>
+        </div>
+
+        <!-- 生徒タブ -->
+        <div class="login-pane" id="pane-student">
+            <form method="post" action="/auth/login">
+                <input type="hidden" name="redirect_to" value="/">
+                <input type="hidden" name="csrf_token" value="349291304451130da0c5a4fab2806c8e06eb44b882a3c550c4900f30844bfba6">
+                <input type="hidden" name="login_mode" value="student">
+                <div class="field-group">
+                    <label class="portal-label" for="student-username">ユーザー名</label>
+                    <input class="portal-input" type="text" id="student-username" name="username" autocomplete="username" placeholder="ユーザー名">
+                </div>
+                <div class="field-group">
+                    <label class="portal-label" for="student-password">パスワード</label>
+                    <input class="portal-input" type="password" id="student-password" name="password" autocomplete="current-password" placeholder="パスワード">
+                </div>
+                
+                <button type="submit">ログイン</button>
+            </form>
+            <p class="login-links">
+                初めての方は <a href="/auth/register">新規登録</a>
+            </p>
+        </div>
+
+        <!-- スタッフタブ -->
+        <div class="login-pane" id="pane-staff">
+            <form method="post" action="/auth/login">
+                <input type="hidden" name="redirect_to" value="/">
+                <input type="hidden" name="csrf_token" value="349291304451130da0c5a4fab2806c8e06eb44b882a3c550c4900f30844bfba6">
+                <input type="hidden" name="login_mode" value="staff">
+                <div class="field-group">
+                    <label class="portal-label" for="staff-password">パスワード</label>
+                    <input class="portal-input" type="password" id="staff-password" name="password" autocomplete="current-password" placeholder="半角英数で入力">
+                </div>
+                
+                <button type="submit">ログイン</button>
+            </form>
+        </div>
+
+        <a class="login-links" href="/" style="display:block; margin-top:1rem;">← トップへ戻る</a>
+    </div>
+
+    <script nonce="prhlgCcCKIB2N1WAiyRk1g" src="/portal-assets/portal-nav.js"></script>
+    <script nonce="prhlgCcCKIB2N1WAiyRk1g">
+    (function() {
+        var tabs = document.querySelectorAll(".login-tab");
+        var panes = document.querySelectorAll(".login-pane");
+
+        // 初期タブ（login_mode がサーバーから渡される場合はそれに従う）
+        var initial = "student";
+
+        function switchTab(mode) {
+            tabs.forEach(function(t) {
+                t.classList.toggle("active", t.dataset.tab === mode);
+            });
+            panes.forEach(function(p) {
+                p.classList.toggle("active", p.id === "pane-" + mode);
+            });
+            // autofocus
+            var focus = mode === "student"
+                ? document.getElementById("student-username")
+                : document.getElementById("staff-password");
+            if (focus) focus.focus();
+        }
+
+        tabs.forEach(function(t) {
+            t.addEventListener("click", function() {
+                switchTab(t.dataset.tab);
+            });
+        });
+
+        switchTab(initial);
+
+        // ASCII以外の文字を除去（パスワード欄のみ）
+        document.querySelectorAll("input[type='password']").forEach(function(pw) {
+            function stripNonAscii() {
+                var v = pw.value;
+                var cleaned = v.replace(/[^\x20-\x7e]/g, "");
+                if (v !== cleaned) pw.value = cleaned;
+            }
+            pw.addEventListener("input", stripNonAscii);
+            pw.addEventListener("compositionend", stripNonAscii);
+        });
+    })();
+    </script>
+</body>
+</html>

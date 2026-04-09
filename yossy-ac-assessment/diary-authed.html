@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アクセス拒否 - Yossy Portal</title>
+    <script nonce="wEXiueG3SWK1zp8RYXP0XA">
+    (function(){var t=localStorage.getItem("portal-theme");if(!t)t=window.matchMedia&&window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light";document.documentElement.setAttribute("data-theme",t)})();
+    </script>
+    <link rel="stylesheet" href="/portal-assets/portal.css">
+    <style>
+        body {
+            min-height: 100vh;
+            text-align: center;
+        }
+        .forbidden-container {
+            max-width: 400px;
+        }
+        .forbidden-container h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            margin-bottom: 0.75rem;
+        }
+        .forbidden-container p {
+            color: var(--p-text-secondary);
+            margin-bottom: 2rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="portal-nav">
+        <div class="portal-nav-inner">
+            <div class="portal-nav-left">
+                <a href="/" class="portal-nav-brand"><img src="/portal-assets/logo-penguin.svg" alt="Yossy Portal" class="portal-nav-icon"></a>
+                <button class="portal-theme-toggle" aria-label="テーマ切替">&#9790;</button>
+            </div>
+            <ul class="portal-nav-links">
+                <li><a href="/">ホーム</a></li>
+            </ul>
+            <div class="portal-nav-right">
+                <a href="/auth/logout" class="portal-nav-logout">ログアウト</a>
+            </div>
+            <button class="portal-hamburger" aria-label="メニュー" aria-expanded="false">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M3 5h14a1 1 0 010 2H3a1 1 0 010-2zm0 4h14a1 1 0 010 2H3a1 1 0 010-2zm0 4h14a1 1 0 010 2H3a1 1 0 010-2z"/></svg>
+            </button>
+        </div>
+    </nav>
+    <div class="portal-mobile-menu">
+        <a href="/">ホーム</a>
+        <a href="/auth/logout" class="portal-nav-logout">ログアウト</a>
+    </div>
+
+    <div class="forbidden-container">
+        <h1>アクセス権限がありません</h1>
+        <p>このページはスタッフ専用です。</p>
+        <a href="/" class="portal-btn portal-btn-secondary">← トップへ戻る</a>
+    </div>
+
+    <script nonce="wEXiueG3SWK1zp8RYXP0XA" src="/portal-assets/portal-nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+fastapi
+uvicorn[standard]
+pydantic-settings
+python-dotenv
+httpx
+beautifulsoup4
+markdownify
+tenacity
+orjson
+networkx
+python-multipart
+openai
+anthropic
+google-genai
+pyyaml
+pymupdf

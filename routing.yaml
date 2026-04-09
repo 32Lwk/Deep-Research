@@ -1,0 +1,67 @@
+version: 1
+
+# 役割ごとの固定ルーティング（provider/model）
+# provider: openai | anthropic | gemini | plamo
+roles:
+  # 既定はGemini中心（Claudeはクレジット不足の場合があるため）
+  brief: { provider: gemini, model: gemini-2.5-flash }
+  debate: { provider: gemini, model: gemini-2.5-flash }
+  synthesis: { provider: gemini, model: gemini-2.5-flash }
+  verify: { provider: gemini, model: gemini-2.5-flash }
+  panorama: { provider: gemini, model: gemini-2.5-flash }
+
+# true のとき、討論エージェント6体を登録済みプロバイダ間でローテーション（APIキーが複数ある場合に有効）
+debate_diversify: true
+
+# 任意: 役割ごとに明示ルートを固定したい場合は debate_diversify より優先される
+# debate_agents:
+#   debater_general: { provider: openai, model: gpt-4o-mini }
+#   debater_contrarian: { provider: gemini, model: gemini-2.5-flash }
+
+# PLaMoは「自由発言1人」に限定（OpenAI互換）。無効化は enabled: false
+plamo_debate:
+  enabled: true
+  provider: plamo
+  model: ${PLAMO_MODEL:-plamo-2.2-prime}
+  take_first_n: 0
+
+budgets:
+  total_tokens: 300000
+  split:
+    io: 0.40
+    synthesis: 0.30
+    debate: 0.20
+    verify: 0.10
+
+concurrency:
+  llm_per_provider: 6
+  url_fetch: 20
+  search: 4
+
+search_defaults:
+  queries_per_lang: 3
+  max_results_per_query: 8
+  langs:
+    - { hl: ja, gl: jp }
+    - { hl: en, gl: us }
+
+export:
+  pdf_enabled: true
+  pandoc_path: pandoc
+  # 日本語崩れ対策（推奨）:
+  # - 事前にTeX環境（例: TeX Live）を入れて xelatex が使える状態にする
+  # - mainfont は環境にある日本語対応フォント名へ（例: "Noto Sans CJK JP"）
+  pdf_engine: xelatex
+  mainfont: "Noto Sans CJK JP"
+  extra_args: []
+
+limits:
+  # 1回のLLM呼び出しで許容するmax_output_tokens上限（run予算とは別）
+  # 大きすぎるとAPIが400で落ちるため、まずは安全側に寄せる
+  max_output_tokens_per_call: 8192
+  # 必要ならプロバイダ別に上書きできます（未指定ならmax_output_tokens_per_callが使われます）
+  per_provider:
+    plamo: 8192
+    gemini: 8192
+    openai: 8192
+    anthropic: 8192
