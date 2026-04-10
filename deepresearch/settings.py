@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     # Storage
     RUNS_DIR: str = "runs"
 
+    # チャット UI のモデル一覧: False=公式ドキュメント由来の静的一覧のみ（高速・確実）。
+    # True=各プロバイダの List Models API も叩いて併合（遅い・環境で失敗しやすい）。
+    DR_CHAT_MODELS_LIVE: bool = False
+
     def openai_key(self) -> str | None:
         return self.OPENAI_API_KEY or self.OpenAI_API_KEY
 

@@ -22,7 +22,7 @@ debate_diversify: true
 plamo_debate:
   enabled: true
   provider: plamo
-  model: ${PLAMO_MODEL:-plamo-2.2-prime}
+  model: ${PLAMO_MODEL:-plamo-2.0-prime}
   take_first_n: 0
 
 budgets:

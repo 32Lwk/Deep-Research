@@ -30,11 +30,12 @@ class ProviderRegistry:
 
         # PLaMo: OpenAI-compatible
         plamo_key = s.plamo_key()
-        if plamo_key or s.PLAMO_BASE_URL:
+        plamo_base_url = s.plamo_base_url()
+        if plamo_key or plamo_base_url:
             # Official docs: Chat Completions endpoint
             # POST https://api.platform.preferredai.jp/v1/chat/completions
             # base_url should be https://api.platform.preferredai.jp/v1
-            base_url = s.PLAMO_BASE_URL or "https://api.platform.preferredai.jp/v1"
+            base_url = plamo_base_url or "https://api.platform.preferredai.jp/v1"
             providers["plamo"] = OpenAIProvider(api_key=plamo_key or "EMPTY", base_url=base_url)
 
         return ProviderRegistry(providers=providers)

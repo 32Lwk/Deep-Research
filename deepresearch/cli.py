@@ -21,11 +21,11 @@ def _default_models(reg: ProviderRegistry) -> dict[str, tuple[str, str]]:
     p0 = prefs[0]
     # MVP defaults; user can edit later
     return {
-        "brief": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "debate": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "synthesis": (p0, "gpt-4.1" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "verify": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "panorama": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
+        "brief": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "debate": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "synthesis": (p0, "gpt-4.1" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "verify": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "panorama": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
     }
 
 

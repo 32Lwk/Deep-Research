@@ -22,6 +22,10 @@ class LlmResponseChunk:
 class LlmProvider:
     name: str
 
+    async def list_chat_models(self) -> list[str]:
+        """各プロバイダの API で利用可能なチャット用モデル ID を返す（未対応時は空）。"""
+        return []
+
     async def complete(
         self,
         *,

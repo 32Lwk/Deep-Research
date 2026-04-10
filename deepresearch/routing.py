@@ -69,9 +69,9 @@ DEBATE_MAIN_AGENT_IDS: tuple[str, ...] = (
 def default_model_for_provider(provider: str) -> str:
     return {
         "openai": "gpt-4o-mini",
-        "anthropic": "claude-3-5-haiku-20241022",
+        "anthropic": "claude-sonnet-4-20250514",
         "gemini": "gemini-2.5-flash",
-        "plamo": "plamo-2.2-prime",
+        "plamo": "plamo-2.0-prime",
     }.get(provider, "gpt-4o-mini")
 
 

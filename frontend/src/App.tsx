@@ -1,7 +1,24 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 
-type ProviderInfo = { available: string[] }
+type ProviderInfo = {
+  available: string[]
+  chat_defaults?: Record<string, string>
+  chat_models?: Record<string, string[]>
+  chat_models_errors?: Record<string, string>
+}
+
+/** API や HMR の一瞬で不正な形が来ても落ちないように正規化する */
+function normalizeChatModelsErrors(raw: unknown): Record<string, string> {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const out: Record<string, string> = {}
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof v === 'string') out[k] = v
+  }
+  return out
+}
+
+type ChatApiResponse = { text?: string; model?: string; provider?: string; error?: string }
 type RunsList = { runs: { run_id: string; has_report: boolean; has_pdf: boolean; updated_at: number }[] }
 type Graph = { nodes: { id: string; type: string; label: string }[]; edges: { source: string; target: string; type: string }[] }
 type EventsTail = { run_id: string; events: string[] }
@@ -31,6 +48,66 @@ function parseRunStartRoutes(raw: Record<string, unknown>): Record<string, Agent
   return Object.keys(out).length ? out : null
 }
 
+/**
+ * API のベース URL。
+ * - VITE_API_BASE が非空ならそのオリジン（末尾スラッシュ除去）
+ * - localhost 系では既定で相対パス（Vite の server.proxy が /api をバックエンドへ中継 → CORS / ポート取り違えを避ける）
+ * - VITE_BACKEND_DIRECT=1 で従来どおり 127.0.0.1:VITE_BACKEND_PORT（既定 8000）へ直結
+ * - それ以外のホストでは相対パス（リバースプロキシ想定）
+ */
+function apiOrigin(): string {
+  const v = import.meta.env.VITE_API_BASE as string | undefined
+  if (typeof v === 'string' && v.length > 0) return v.replace(/\/$/, '')
+  const direct = import.meta.env.VITE_BACKEND_DIRECT as string | undefined
+  if (direct === '1' || direct === 'true') {
+    if (typeof window !== 'undefined') {
+      const h = window.location.hostname
+      if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') {
+        const portEnv = import.meta.env.VITE_BACKEND_PORT as string | undefined
+        const port = portEnv && /^\d+$/.test(portEnv) ? portEnv : '8000'
+        return `http://127.0.0.1:${port}`
+      }
+    }
+  }
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    if (h === 'localhost' || h === '127.0.0.1' || h === '[::1]') {
+      return ''
+    }
+  }
+  return ''
+}
+
+function apiUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  const p = path.startsWith('/') ? path : `/${path}`
+  const o = apiOrigin()
+  return o ? `${o}${p}` : p
+}
+
+function wsUrl(path: string): string {
+  const p = path.startsWith('/') ? path : `/${path}`
+  const o = apiOrigin()
+  if (o) {
+    try {
+      const base = o.includes('://') ? o : `http://${o}`
+      const u = new URL(base)
+      const proto = u.protocol === 'https:' ? 'wss' : 'ws'
+      return `${proto}://${u.host}${p}`
+    } catch {
+      return `ws://127.0.0.1:8000${p}`
+    }
+  }
+  const loc = window.location
+  const proto = loc.protocol === 'https:' ? 'wss' : 'ws'
+  return `${proto}://${loc.host}${p}`
+}
+
+function resolveFetchUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) return path
+  return apiUrl(path)
+}
+
 type UiEvent =
   | { kind: 'ws_closed' }
   | { kind: 'raw'; text: string }
@@ -54,7 +131,7 @@ async function jTimeout<T>(path: string, init?: RequestInit, timeoutMs: number =
   const ac = new AbortController()
   const id = window.setTimeout(() => ac.abort(), timeoutMs)
   try {
-    const r = await fetch(path, { ...init, signal: ac.signal })
+    const r = await fetch(resolveFetchUrl(path), { ...init, signal: ac.signal })
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
     return (await r.json()) as T
   } catch (e) {
@@ -69,7 +146,7 @@ async function tTimeout(path: string, init?: RequestInit, timeoutMs: number = 10
   const ac = new AbortController()
   const id = window.setTimeout(() => ac.abort(), timeoutMs)
   try {
-    const r = await fetch(path, { ...init, signal: ac.signal })
+    const r = await fetch(resolveFetchUrl(path), { ...init, signal: ac.signal })
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`)
     return await r.text()
   } catch (e) {
@@ -250,10 +327,10 @@ function matchesPreset(ev: UiEvent, preset: Preset): boolean {
   return true
 }
 
-function StatusSummary({ events }: { events: UiEvent[] }) {
+function StatusSummary({ events, nowMs }: { events: UiEvent[]; nowMs: number }) {
   const jsonEvents = events.filter((e) => e.kind === 'json') as Extract<UiEvent, { kind: 'json' }>[]
   const lastTs = Math.max(0, ...jsonEvents.map((e) => e.ts_ms ?? 0))
-  const lastAgeSec = lastTs ? Math.max(0, (Date.now() - lastTs) / 1000) : null
+  const lastAgeSec = lastTs ? Math.max(0, (nowMs - lastTs) / 1000) : null
 
   const lastType = [...jsonEvents].reverse().find((e) => e.type)?.type
   const phase =
@@ -278,7 +355,7 @@ function StatusSummary({ events }: { events: UiEvent[] }) {
 
   const runningAgents = [...latestByAgent.values()]
     .filter((e) => e.type === 'llm_call_start' || e.type === 'debate_agent_start')
-    .filter((e) => (e.ts_ms ?? 0) > Date.now() - 60_000)
+    .filter((e) => (e.ts_ms ?? 0) > nowMs - 60_000)
     .map((e) => e.agent_id!)
 
   return (
@@ -303,6 +380,372 @@ function providerIcon(provider?: string): string | null {
   return m[p] ?? null
 }
 
+type DirectChatTurn = { role: 'user' | 'assistant'; provider: string; model?: string; text: string }
+
+/** API 未取得時の最低限候補（バックエンドの静的一覧と揃える） */
+const LOCAL_CHAT_MODEL_FALLBACK: Record<string, string[]> = {
+  openai: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini', 'o3-mini'],
+  anthropic: ['claude-sonnet-4-20250514', 'claude-haiku-4-20251001', 'claude-3-5-sonnet-20241022'],
+  gemini: ['gemini-2.5-flash', 'gemini-2.5-pro', 'gemini-2.0-flash'],
+  plamo: ['plamo-2.0-prime'],
+}
+
+function mergeChatModelOptions(
+  provider: string,
+  chatModels: Record<string, string[]>,
+  chatDefaults: Record<string, string>,
+): string[] {
+  const raw = [...(chatModels[provider] ?? [])]
+  const d = chatDefaults[provider] ?? ''
+  if (d && !raw.includes(d)) raw.unshift(d)
+  if (raw.length === 0 && d) return [d]
+  if (raw.length === 0) {
+    const fb = LOCAL_CHAT_MODEL_FALLBACK[provider] ?? []
+    if (fb.length) return [...fb]
+  }
+  return raw
+}
+
+function defaultModelForProvider(
+  provider: string,
+  chatModels: Record<string, string[]>,
+  chatDefaults: Record<string, string>,
+): string {
+  const opts = mergeChatModelOptions(provider, chatModels, chatDefaults)
+  const d = chatDefaults[provider] ?? ''
+  const pick = (d && opts.includes(d) ? d : opts[0]) || d || ''
+  return pick || '__custom__'
+}
+
+function ChatModelPicker({
+  options,
+  model,
+  customPicked,
+  customModel,
+  onSelectModel,
+  onSelectCustomMode,
+  onCustomModelChange,
+  disabled,
+  modelsLoading,
+}: {
+  options: string[]
+  model: string
+  customPicked: boolean
+  customModel: string
+  onSelectModel: (id: string) => void
+  onSelectCustomMode: () => void
+  onCustomModelChange: (s: string) => void
+  disabled: boolean
+  modelsLoading: boolean
+}) {
+  const [q, setQ] = useState('')
+  const filtered = useMemo(() => {
+    const qq = q.trim().toLowerCase()
+    if (!qq) return options
+    return options.filter((o) => o.toLowerCase().includes(qq))
+  }, [options, q])
+
+  const showCustom = model === '__custom__'
+  const customActive = showCustom && customPicked
+
+  return (
+    <div className={`chatModelPicker ${disabled ? 'chatModelPicker--disabled' : ''}`}>
+      <div className="chatModelPickerTop">
+        <input
+          type="search"
+          className="chatModelPickerSearch"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="モデル ID を検索…"
+          disabled={disabled}
+          autoComplete="off"
+          spellCheck={false}
+        />
+        <span className="chatModelPickerCount" title={`${options.length} 件`}>
+          {modelsLoading ? '取得中…' : `${options.length} 件`}
+        </span>
+      </div>
+      <div className="chatModelPickerList" role="listbox" aria-label="モデル一覧">
+        {options.length === 0 ? (
+          <div className="chatModelPickerEmpty">候補がありません。バックエンドを再起動するか、「カスタム ID」で入力してください。</div>
+        ) : filtered.length === 0 ? (
+          <div className="chatModelPickerEmpty">検索に一致するモデルがありません。</div>
+        ) : (
+          filtered.map((id) => (
+            <button
+              key={id}
+              type="button"
+              role="option"
+              aria-selected={model === id}
+              className={`chatModelPickerItem ${model === id ? 'chatModelPickerItem--active' : ''}`}
+              onClick={() => {
+                onSelectModel(id)
+                setQ('')
+              }}
+            >
+              {id}
+            </button>
+          ))
+        )}
+      </div>
+      <div className="chatModelPickerCustomRow">
+        <button
+          type="button"
+          className={`secondaryBtn chatModelPickerCustomBtn ${customActive ? 'chatModelPickerCustomBtn--on' : ''}`}
+          onClick={() => {
+            onSelectCustomMode()
+            setQ('')
+          }}
+        >
+          カスタム ID
+        </button>
+        {showCustom ? (
+          <input
+            className="chatOneInput chatModelPickerCustomInput"
+            value={customModel}
+            onChange={(e) => onCustomModelChange(e.target.value)}
+            placeholder="モデル ID を直接入力"
+            spellCheck={false}
+          />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function DirectChat({
+  providers,
+  chatDefaults,
+  chatModels,
+  modelsLoading,
+  modelsErrors,
+  providerInfoLoading,
+  providerInfoError,
+  onReloadModels,
+}: {
+  providers: string[]
+  chatDefaults: Record<string, string>
+  chatModels: Record<string, string[]>
+  modelsLoading: boolean
+  modelsErrors: Record<string, string>
+  providerInfoLoading: boolean
+  providerInfoError: string | null
+  onReloadModels: () => void
+}) {
+  const [provider, setProvider] = useState<string>(providers[0] ?? 'openai')
+  const [model, setModel] = useState<string>('')
+  const [customPicked, setCustomPicked] = useState<boolean>(false)
+  const [customModel, setCustomModel] = useState<string>('')
+  const [message, setMessage] = useState<string>('')
+  const [turns, setTurns] = useState<DirectChatTurn[]>([])
+  const [error, setError] = useState<string>('')
+  const [loading, setLoading] = useState<boolean>(false)
+  const modelErrs = modelsErrors ?? {}
+
+  useEffect(() => {
+    if (!providers.includes(provider)) setProvider(providers[0] ?? 'openai')
+  }, [providers, provider])
+
+  const mergedModelOptions = useMemo(
+    () => mergeChatModelOptions(provider, chatModels, chatDefaults),
+    [provider, chatModels, chatDefaults],
+  )
+
+  const modelListSig = useMemo(() => JSON.stringify(mergedModelOptions), [mergedModelOptions])
+
+  useEffect(() => {
+    const opts = mergedModelOptions
+    const d = chatDefaults[provider] ?? ''
+    const pick = (d && opts.includes(d) ? d : opts[0]) || d || ''
+    const resolved = pick || '__custom__'
+    setModel((m) => {
+      if (m === '__custom__') return customPicked ? m : resolved
+      if (m && opts.includes(m)) return m
+      return resolved
+    })
+  }, [provider, mergedModelOptions, chatDefaults, customPicked])
+
+  // 一覧更新で chat_models が変わったら「カスタム固定」を解除し、新しい候補に合わせ直す
+  useEffect(() => {
+    setCustomPicked(false)
+  }, [modelListSig])
+
+  const prevModelsLoading = useRef(false)
+  useEffect(() => {
+    if (prevModelsLoading.current && !modelsLoading) {
+      setCustomPicked(false)
+    }
+    prevModelsLoading.current = modelsLoading
+  }, [modelsLoading])
+
+  const modelOptions = mergedModelOptions
+  const selectedModel = model === '__custom__' ? customModel.trim() : model.trim()
+  const icon = providerIcon(provider)
+
+  async function send() {
+    const msg = message.trim()
+    if (!msg) return
+    setLoading(true)
+    setError('')
+    setTurns((t) => [...t, { role: 'user', provider, text: msg }])
+    setMessage('')
+    try {
+      const r = await jTimeout<ChatApiResponse>(
+        '/api/chat',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            provider,
+            message: msg,
+            ...(selectedModel ? { model: selectedModel } : {}),
+          }),
+        },
+        120_000,
+      )
+      if (r.error) {
+        setError(r.error)
+        return
+      }
+      setTurns((t) => [...t, { role: 'assistant', provider: provider, model: r.model, text: r.text ?? '' }])
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (providers.length === 0) {
+    if (providerInfoLoading) {
+      return (
+        <div className="chatDirectEmpty chatDirectEmpty--loading">
+          <p>バックエンドからプロバイダ一覧を取得しています…</p>
+        </div>
+      )
+    }
+    if (providerInfoError) {
+      return (
+        <div className="chatDirectEmpty chatDirectEmpty--detail">
+          <p className="chatDirectEmptyTitle">プロバイダ一覧に接続できませんでした</p>
+          <p className="chatDirectEmptyMsg">{providerInfoError}</p>
+          <p className="chatDirectEmptyHint">
+            FastAPI が起動しているか確認してください（推奨: リポジトリ直下で <code>python dev.py</code>。単体なら <code>python -m deepresearch.web</code>）。
+            開発中の UI は <code>/api</code> を Vite がバックエンドへ転送します。既定は <code>127.0.0.1:8000</code> です。別ポートなら <code>frontend/.env</code> に <code>VITE_BACKEND_PORT</code> を合わせてください。
+            ブラウザから API へ直結する場合は <code>VITE_BACKEND_DIRECT=1</code> を設定します。
+          </p>
+          <button type="button" className="primaryBtn" onClick={() => void onReloadModels()}>
+            再接続
+          </button>
+        </div>
+      )
+    }
+    return (
+      <div className="chatDirectEmpty chatDirectEmpty--detail">
+        <p className="chatDirectEmptyTitle">利用可能なプロバイダがありません</p>
+        <p className="chatDirectEmptyHint">
+          リポジトリ直下の <code>.env</code> に、使う LLM の API キーを<strong>少なくとも1つ</strong>設定し、バックエンドを再起動してください。
+        </p>
+        <ul className="chatDirectEnvList">
+          <li><code>OPENAI_API_KEY</code> または <code>OpenAI_API_KEY</code></li>
+          <li><code>ANTHROPIC_API_KEY</code> または <code>Claude_API_KEY</code></li>
+          <li><code>GEMINI_API_KEY</code> または <code>Gemini_API_KEY</code></li>
+          <li>PLaMo: <code>PLAMO_API_KEY</code> または <code>PLaMo_API_KEY</code>（<code>PLAMO_BASE_URL</code> は任意）</li>
+        </ul>
+        <button type="button" className="secondaryBtn" onClick={() => void onReloadModels()}>
+          再読み込み
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="chatOneRoot">
+      <div className="chatOneTop">
+        <div className="chatOneTitle">
+          {icon ? <img className="chatOneIcon" src={icon} alt="" /> : null}
+          <span>チャット</span>
+        </div>
+        <div className="chatOneControls">
+          <label className="chatOneLabel">
+            Provider
+            <select
+              className="chatOneSelect"
+              value={provider}
+              onChange={(e) => {
+                const next = e.target.value
+                setProvider(next)
+                setCustomPicked(false)
+                setModel(defaultModelForProvider(next, chatModels, chatDefaults))
+              }}
+            >
+              {providers.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </label>
+          <label className="chatOneLabel chatOneLabel--model">
+            Model
+            <ChatModelPicker
+              options={modelOptions}
+              model={model}
+              customPicked={customPicked}
+              customModel={customModel}
+              onSelectModel={(id) => {
+                setModel(id)
+                setCustomPicked(false)
+              }}
+              onSelectCustomMode={() => {
+                setModel('__custom__')
+                setCustomPicked(true)
+              }}
+              onCustomModelChange={setCustomModel}
+              disabled={modelsLoading && modelOptions.length === 0}
+              modelsLoading={modelsLoading}
+            />
+            <div className="chatOneModelRow chatOneModelRow--footer">
+              <button type="button" className="secondaryBtn chatOneReloadModels" onClick={onReloadModels} disabled={modelsLoading} title="サーバーからプロバイダ情報・モデル一覧を再取得">
+                {modelsLoading ? '取得中…' : '一覧更新'}
+              </button>
+            </div>
+            {modelErrs[provider] ? (
+              <span className="chatOneModelHint chatOneModelHint--warn" title={modelErrs[provider]}>
+                このプロバイダは API 取得に失敗し、既定の候補のみ表示しています。
+              </span>
+            ) : null}
+          </label>
+        </div>
+      </div>
+
+      {modelErrs._all ? <div className="chatOneErr chatOneErr--banner">モデル一覧 API の取得に失敗しました: {modelErrs._all}</div> : null}
+
+      <div className="chatOneLog" role="log" aria-live="polite">
+        {turns.length === 0 ? (
+          <div className="chatOneEmpty">上部で Provider / Model を選び、下の入力欄から送信してください。</div>
+        ) : (
+          turns.map((t, i) => (
+            <div key={i} className={`chatOneTurn ${t.role === 'user' ? 'chatOneTurn--user' : 'chatOneTurn--assistant'}`}>
+              <div className="chatOneMeta">
+                <span className="chatOneRole">{t.role}</span>
+                <span className="chatOneProv">{t.provider}{t.model ? ` / ${t.model}` : ''}</span>
+              </div>
+              <pre className="chatOneText">{t.text}</pre>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="chatOneComposer">
+        <textarea className="chatOneTextarea" value={message} onChange={(e) => setMessage(e.target.value)} rows={4} placeholder="メッセージ…" />
+        <div className="chatOneActions">
+          <button type="button" className="secondaryBtn" onClick={() => setTurns([])} disabled={loading}>履歴クリア</button>
+          <button type="button" className="primaryBtn" onClick={() => void send()} disabled={loading || !message.trim()}>
+            {loading ? '送信中…' : '送信'}
+          </button>
+        </div>
+        {error ? <div className="chatOneErr">{error}</div> : null}
+      </div>
+    </div>
+  )
+}
+
 type ArenaNode = {
   id: string
   label: string
@@ -315,6 +758,7 @@ type ArenaNode = {
 function Arena({
   events,
   yamlPlan,
+  nowMs,
   preset,
   onPresetChange,
   selectedAgent,
@@ -322,6 +766,7 @@ function Arena({
 }: {
   events: UiEvent[]
   yamlPlan: Record<string, AgentRoute>
+  nowMs: number
   preset: Preset
   onPresetChange: (p: Preset) => void
   selectedAgent: string | null
@@ -393,7 +838,7 @@ function Arena({
                 : e?.role ?? 'agent'
     const state: ArenaNode['state'] =
       e && (isErrorType(e.type) || e.type === 'debate_agent_error') ? 'error'
-        : e && (e.type === 'llm_call_start' || e.type === 'debate_agent_start') && (e.ts_ms ?? 0) > Date.now() - 60_000 ? 'running'
+        : e && (e.type === 'llm_call_start' || e.type === 'debate_agent_start') && (e.ts_ms ?? 0) > nowMs - 60_000 ? 'running'
           : 'idle'
     return {
       id,
@@ -484,8 +929,15 @@ function Arena({
 }
 
 function App() {
-  const [tab, setTab] = useState<'run' | 'report' | 'settings' | 'arena'>('run')
+  const [tab, setTab] = useState<'run' | 'report' | 'settings' | 'arena' | 'chat'>('run')
   const [providers, setProviders] = useState<string[]>([])
+  const [chatDefaults, setChatDefaults] = useState<Record<string, string>>({})
+  const [chatModels, setChatModels] = useState<Record<string, string[]>>({})
+  const [chatModelsLoading, setChatModelsLoading] = useState(false)
+  const [chatModelsErrors, setChatModelsErrors] = useState<Record<string, string>>({})
+  const [providerInfoLoading, setProviderInfoLoading] = useState(true)
+  const [providerInfoError, setProviderInfoError] = useState<string | null>(null)
+  const [nowMs, setNowMs] = useState<number>(() => Date.now())
 
   const [topic, setTopic] = useState('')
   const [seedUrls, setSeedUrls] = useState('')
@@ -513,10 +965,38 @@ function App() {
   const [selectedAgent, setSelectedAgent] = useState<string | null>(null)
   const [runSetupOpen, setRunSetupOpen] = useState(false)
 
+  const loadProviderInfo = useCallback(async (showLoading: boolean) => {
+    setProviderInfoLoading(true)
+    setProviderInfoError(null)
+    if (showLoading) setChatModelsLoading(true)
+    try {
+      setChatModelsErrors({})
+      const x = await jTimeout<ProviderInfo>('/api/providers', undefined, 120_000)
+      const avail = x.available ?? []
+      setProviders(avail)
+      setChatDefaults(x.chat_defaults ?? {})
+      setChatModels(x.chat_models ?? {})
+      setChatModelsErrors(normalizeChatModelsErrors(x.chat_models_errors))
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      setProviderInfoError(msg)
+      setProviders([])
+      setChatDefaults({})
+      setChatModels({})
+      setChatModelsErrors({ _all: msg })
+    } finally {
+      setProviderInfoLoading(false)
+      if (showLoading) setChatModelsLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
-    jTimeout<ProviderInfo>('/api/providers', undefined, 3000)
-      .then((x) => setProviders(x.available))
-      .catch(() => setProviders([]))
+    void loadProviderInfo(false)
+  }, [loadProviderInfo])
+
+  useEffect(() => {
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000)
+    return () => window.clearInterval(id)
   }, [])
 
   async function loadRoutingPreview() {
@@ -566,7 +1046,7 @@ function App() {
     if (events.length > 0) return
     // 初回導線: 実行設定を最初だけ開く
     setRunSetupOpen(true)
-  }, [tab])
+  }, [tab, events.length])
 
   async function refreshRuns() {
     const x = await jTimeout<RunsList>('/api/runs', undefined, 5000)
@@ -610,8 +1090,7 @@ function App() {
       setStartPhase('WebSocket接続中…')
       wsRef.current?.close()
       setWsError(null)
-      // Vite(5173)ではWS proxyが効かない場合があるため、FastAPI(8000)へ直接接続する
-      const ws = new WebSocket(`ws://127.0.0.1:8000/api/runs/${run_id}/events`)
+      const ws = new WebSocket(wsUrl(`/api/runs/${run_id}/events`))
       ws.onmessage = (ev) => {
         wsBufferRef.current.push(ev.data)
         scheduleWsFlush()
@@ -629,7 +1108,7 @@ function App() {
         setStartPhase('ファイルアップロード中…')
         const fd = new FormData()
         for (const f of Array.from(files)) fd.append('files', f)
-        const up = await fetch(`/api/runs/${run_id}/files`, { method: 'POST', body: fd })
+        const up = await fetch(apiUrl(`/api/runs/${run_id}/files`), { method: 'POST', body: fd })
         if (!up.ok) throw new Error(`files upload failed: ${up.status} ${up.statusText}`)
       }
 
@@ -664,8 +1143,11 @@ function App() {
     setReportMd(md)
     try {
       const g = await jTimeout<Graph>(`/api/runs/${runId}/graph.json`, undefined, 10_000)
-      if (!('error' in (g as any))) setGraph(g)
-    } catch {}
+      const maybeErr = (g as unknown as Record<string, unknown>).error
+      if (maybeErr === undefined) setGraph(g)
+    } catch {
+      // ignore
+    }
     setTab('report')
   }
 
@@ -691,6 +1173,9 @@ function App() {
           <button type="button" className={tab === 'run' ? 'navBtn navBtn--active' : 'navBtn'} onClick={() => setTab('run')}>
             Run
           </button>
+          <button type="button" className={tab === 'chat' ? 'navBtn navBtn--active' : 'navBtn'} onClick={() => setTab('chat')}>
+            Chat
+          </button>
           <button type="button" className={tab === 'report' ? 'navBtn navBtn--active' : 'navBtn'} onClick={() => setTab('report')} disabled={!runId}>
             Report
           </button>
@@ -711,7 +1196,7 @@ function App() {
         <div className="appProviders">providers: {providers.join(', ') || 'none'}</div>
       </header>
 
-      <StatusSummary events={eventsView} />
+      <StatusSummary events={eventsView} nowMs={nowMs} />
 
       <main className="appMain">
         {tab === 'run' && (
@@ -877,6 +1362,25 @@ function App() {
           </div>
         )}
 
+        {tab === 'chat' && (
+          <div className="chatDirectRoot" style={{ marginTop: 12, textAlign: 'left' }}>
+            <h3 style={{ color: 'var(--text-h)', marginBottom: 8 }}>チャット</h3>
+            <p style={{ fontSize: 14, opacity: 0.85, marginBottom: 16, maxWidth: 720 }}>
+              研究ラン（Run）とは別に、登録済みの LLM へ直接メッセージを送れます。上部で Provider / Model を選択してください。
+            </p>
+            <DirectChat
+              providers={providers}
+              chatDefaults={chatDefaults}
+              chatModels={chatModels}
+              modelsLoading={chatModelsLoading}
+              modelsErrors={chatModelsErrors}
+              providerInfoLoading={providerInfoLoading}
+              providerInfoError={providerInfoError}
+              onReloadModels={() => void loadProviderInfo(true)}
+            />
+          </div>
+        )}
+
         {tab === 'report' && (
           <div style={{ marginTop: 12 }}>
             <h3 style={{ color: 'var(--text-h)', textAlign: 'left' }}>Report (Markdown)</h3>
@@ -914,6 +1418,7 @@ function App() {
             <Arena
               events={eventsView}
               yamlPlan={arenaYamlPlan}
+              nowMs={nowMs}
               preset={preset}
               onPresetChange={setPreset}
               selectedAgent={selectedAgent}

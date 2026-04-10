@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
+from deepresearch.chat import chat_default_models_for, chat_turn, fetch_chat_models_catalog
 from deepresearch.core import DEFAULT_SPLIT, Orchestrator, RunConfig, new_run_id
 from deepresearch.providers import ProviderRegistry
 from deepresearch.routing import load_routing_config, resolve_debate_routes
@@ -30,6 +33,14 @@ class RunState:
 
 
 app = FastAPI()
+# vite preview / 別ポートの静的配信から 127.0.0.1:8000 へ API を直叩きするため（開発用途）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=r"http://(127\.0\.0\.1|localhost)(:\d+)?",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 settings = Settings()
 registry = ProviderRegistry.from_settings(settings)
 rcfg = load_routing_config()
@@ -48,11 +59,11 @@ def _default_models() -> dict[str, tuple[str, str]]:
         return {}
     p0 = avail[0]
     return {
-        "brief": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "debate": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "synthesis": (p0, "gpt-4.1" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "verify": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
-        "panorama": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-3-5-sonnet-latest"),
+        "brief": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "debate": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "synthesis": (p0, "gpt-4.1" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "verify": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
+        "panorama": (p0, "gpt-4.1-mini" if p0 == "openai" else "claude-sonnet-4-20250514"),
     }
 
 
@@ -141,8 +152,75 @@ def index() -> str:
 
 
 @app.get("/api/providers")
-def providers() -> dict[str, Any]:
-    return {"available": registry.available()}
+async def providers() -> dict[str, Any]:
+    """
+    利用プロバイダ・チャット既定モデル・モデル ID 一覧を返す。
+    既定では公式ドキュメント由来の静的一覧（`static_chat_models`）。環境変数 DR_CHAT_MODELS_LIVE=1 で List Models API と併合。
+    """
+    avail = registry.available()
+    catalog = await fetch_chat_models_catalog(registry, query_live=settings.DR_CHAT_MODELS_LIVE)
+    return {
+        "available": avail,
+        "chat_defaults": chat_default_models_for(avail),
+        "chat_models": catalog["models"],
+        "chat_models_errors": catalog.get("errors") or {},
+    }
+
+
+@app.get("/api/chat/models")
+async def api_chat_models() -> dict[str, Any]:
+    """互換・デバッグ用。中身は /api/providers と同じカタログ取得。"""
+    return await fetch_chat_models_catalog(registry, query_live=settings.DR_CHAT_MODELS_LIVE)
+
+
+@app.post("/api/chat")
+async def api_chat(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    フロントの「プロバイダ別チャット」用。研究パイプライン（run）とは独立。
+    body: { provider, message, model?, system?, max_output_tokens?, temperature? }
+    """
+    provider = (payload.get("provider") or "").strip().lower()
+    message = (payload.get("message") or "").strip()
+    if not provider:
+        return {"error": "provider is required"}
+    if not message:
+        return {"error": "message is required"}
+    if provider not in registry.available():
+        return {"error": f"provider not configured: {provider}"}
+
+    model = payload.get("model")
+    if not isinstance(model, str):
+        model = None
+    system = payload.get("system")
+    if not isinstance(system, str):
+        system = None
+
+    max_out = payload.get("max_output_tokens")
+    try:
+        max_tokens = int(max_out) if max_out is not None else 2048
+    except (TypeError, ValueError):
+        max_tokens = 2048
+    max_tokens = max(64, min(max_tokens, 8192))
+
+    try:
+        temp = float(payload.get("temperature", 0.3))
+    except (TypeError, ValueError):
+        temp = 0.3
+    temp = max(0.0, min(temp, 1.0))
+
+    try:
+        text, used_model = await chat_turn(
+            registry,
+            provider=provider,
+            message=message,
+            model=model,
+            system=system,
+            max_output_tokens=max_tokens,
+            temperature=temp,
+        )
+        return {"provider": provider, "model": used_model, "text": text}
+    except Exception as e:
+        return {"error": str(e), "provider": provider}
 
 
 @app.post("/api/runs")
@@ -401,7 +479,9 @@ def get_events(run_id: str) -> dict[str, Any]:
 def main() -> None:
     import uvicorn
 
-    uvicorn.run("deepresearch.web:app", host="127.0.0.1", port=8000, reload=False)
+    host = os.environ.get("DEEPRESEARCH_BACKEND_HOST", "127.0.0.1")
+    port = int(os.environ.get("DEEPRESEARCH_BACKEND_PORT", os.environ.get("PORT", "8000")))
+    uvicorn.run("deepresearch.web:app", host=host, port=port, reload=False)
 
 
 if __name__ == "__main__":

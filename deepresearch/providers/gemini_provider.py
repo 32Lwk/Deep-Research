@@ -16,6 +16,35 @@ class GeminiProvider(LlmProvider):
         self._client = genai.Client(api_key=api_key)
 
     @staticmethod
+    def _gemini_api_short_id(full_name: str) -> str:
+        s = full_name.strip()
+        if not s:
+            return ""
+        # "publishers/google/models/gemini-2.5-flash" など末尾のモデル名だけ使う
+        tail = s.rsplit("/", 1)[-1]
+        return tail.removeprefix("models/")
+
+    def _list_models_sync(self) -> list[str]:
+        out: list[str] = []
+        for m in self._client.models.list():
+            name = (getattr(m, "name", None) or "").strip()
+            if not name:
+                continue
+            short = self._gemini_api_short_id(name)
+            if not short:
+                continue
+            low = short.lower()
+            if "embedding" in low:
+                continue
+            if not (short.startswith("gemini-") or short.startswith("gemma-")):
+                continue
+            out.append(short)
+        return sorted(set(out))
+
+    async def list_chat_models(self) -> list[str]:
+        return await asyncio.to_thread(self._list_models_sync)
+
+    @staticmethod
     def _build_prompt(messages: Sequence[Message]) -> str:
         system = "\n".join([m.content for m in messages if m.role == "system"]).strip()
         user_text = "\n\n".join([f"{m.role.upper()}:\n{m.content}" for m in messages if m.role != "system"]).strip()

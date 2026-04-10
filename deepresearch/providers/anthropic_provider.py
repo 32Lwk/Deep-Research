@@ -13,6 +13,15 @@ class AnthropicProvider(LlmProvider):
     def __init__(self, api_key: str) -> None:
         self._client = AsyncAnthropic(api_key=api_key)
 
+    async def list_chat_models(self) -> list[str]:
+        # 公式は GET /v1/models（anthropic-version + x-api-key）。beta ではなく安定の models.list を使う。
+        ids: list[str] = []
+        async for item in self._client.models.list(limit=1000):
+            mid = getattr(item, "id", None)
+            if isinstance(mid, str) and mid.strip():
+                ids.append(mid.strip())
+        return sorted(set(ids))
+
     def _to_prompt(self, messages: Sequence[Message]) -> tuple[str, list[dict]]:
         system = ""
         converted: list[dict] = []

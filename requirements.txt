@@ -14,3 +14,4 @@ anthropic
 google-genai
 pyyaml
 pymupdf
+pytest

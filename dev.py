@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import signal
@@ -7,6 +8,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 
@@ -29,6 +32,7 @@ def _popen(
     *,
     cwd: Path,
     name: str,
+    env: dict[str, str] | None = None,
 ) -> subprocess.Popen[bytes]:
     creationflags = 0
     start_new_session = False
@@ -41,7 +45,7 @@ def _popen(
     return subprocess.Popen(
         args,
         cwd=str(cwd),
-        env=os.environ.copy(),
+        env=env if env is not None else os.environ.copy(),
         stdin=subprocess.DEVNULL,
         stdout=None,
         stderr=None,
@@ -59,6 +63,21 @@ def _is_port_available(host: str, port: int) -> bool:
         except OSError:
             return False
         return True
+
+
+def _probe_deepresearch_api(host: str, port: int, *, timeout: float = 2.5) -> bool:
+    """ポート上が DeepResearch の /api/providers か（ブラウザより緩いが誤検知しにくい）。"""
+    url = f"http://{host}:{port}/api/providers"
+    try:
+        req = urllib.request.Request(url, method="GET", headers={"Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return False
+            raw = resp.read()
+        data = json.loads(raw.decode("utf-8"))
+        return isinstance(data, dict) and "available" in data
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, json.JSONDecodeError, ValueError):
+        return False
 
 
 def _terminate(proc: subprocess.Popen[bytes], *, name: str) -> None:
@@ -91,18 +110,48 @@ def main() -> int:
     frontend_args = [npm, "run", "dev"]
 
     backend: subprocess.Popen[bytes] | None = None
+    frontend_env = os.environ.copy()
+    backend_env = os.environ.copy()
+
     if _is_port_available(BACKEND_HOST, BACKEND_PORT):
         print("Starting backend:", " ".join(backend_args))
-        backend = _popen(backend_args, cwd=ROOT, name="backend")
-        time.sleep(0.4)
-    else:
+        backend = _popen(backend_args, cwd=ROOT, name="backend", env=backend_env)
+        time.sleep(0.5)
+    elif _probe_deepresearch_api(BACKEND_HOST, BACKEND_PORT):
         print(
-            f"Backend port {BACKEND_HOST}:{BACKEND_PORT} is already in use; "
-            "skipping backend start and assuming an existing backend is running."
+            f"Backend port {BACKEND_HOST}:{BACKEND_PORT} is in use but responds like DeepResearch; "
+            "skipping backend start."
         )
+    else:
+        alt: int | None = None
+        for p in range(BACKEND_PORT + 1, BACKEND_PORT + 16):
+            if _is_port_available(BACKEND_HOST, p):
+                alt = p
+                break
+        if alt is None:
+            print(
+                f"ERROR: Port {BACKEND_HOST}:{BACKEND_PORT} is in use and does not look like DeepResearch API, "
+                f"and no free port found in {BACKEND_PORT + 1}..{BACKEND_PORT + 15}.",
+                file=sys.stderr,
+            )
+            print(
+                "Stop the process using that port (e.g. another app on 8000) or set DEEPRESEARCH_BACKEND_PORT "
+                "to a free port and matching VITE_BACKEND_PORT in frontend/.env, then retry.",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            f"Port {BACKEND_HOST}:{BACKEND_PORT} is in use (not DeepResearch API). "
+            f"Starting backend on {BACKEND_HOST}:{alt} and VITE_BACKEND_PORT={alt} for the dev server.",
+            file=sys.stderr,
+        )
+        backend_env["DEEPRESEARCH_BACKEND_PORT"] = str(alt)
+        frontend_env["VITE_BACKEND_PORT"] = str(alt)
+        backend = _popen(backend_args, cwd=ROOT, name="backend", env=backend_env)
+        time.sleep(0.5)
 
     print("Starting frontend:", " ".join(frontend_args))
-    frontend = _popen(frontend_args, cwd=FRONTEND_DIR, name="frontend")
+    frontend = _popen(frontend_args, cwd=FRONTEND_DIR, name="frontend", env=frontend_env)
 
     try:
         while True:

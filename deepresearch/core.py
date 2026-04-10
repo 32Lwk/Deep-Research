@@ -146,9 +146,13 @@ class Orchestrator:
         except Exception as e:
             # Best-effort fallback for OpenAI-like model naming issues
             self.emit_event(event(self.run_id, "llm_error", provider=provider, model=model, error=str(e)))
-            fallback_models = []
-            if provider in ("openai", "plamo"):
+            fallback_models: list[str] = []
+            if provider == "openai":
                 fallback_models = ["gpt-4.1-mini", "gpt-4o-mini", "gpt-4o"]
+            elif provider == "plamo":
+                # PLaMo is OpenAI Chat Completions compatible, but model ids differ.
+                # Prefer known public model id; allow env/config to override the primary `model` argument.
+                fallback_models = ["plamo-2.0-prime"]
             for fb in fallback_models:
                 if fb == model:
                     continue

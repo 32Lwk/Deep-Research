@@ -879,3 +879,450 @@ textarea {
     height: 460px;
   }
 }
+
+/* --- Provider direct chat (Chat tab) --- */
+.chatDirectRoot {
+  width: 100%;
+}
+
+.chatDirectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.chatDirectCard {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+}
+
+.chatDirectHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.chatDirectIcon {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.chatDirectTitle {
+  font-weight: 700;
+  color: var(--text-h);
+  text-transform: capitalize;
+}
+
+.chatDirectLabel {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-h);
+  margin: 8px 0 4px;
+}
+
+.chatDirectInput {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  font: inherit;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.chatDirectTextarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+  resize: vertical;
+  min-height: 100px;
+  background: var(--bg);
+  color: var(--text-h);
+}
+
+.chatDirectSend {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.chatDirectErr {
+  margin-top: 10px;
+  font-size: 13px;
+  color: tomato;
+  white-space: pre-wrap;
+}
+
+.chatDirectReply {
+  margin-top: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chatDirectEmpty {
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px dashed var(--border);
+  color: var(--text);
+}
+
+.chatDirectEmpty--loading {
+  border-style: solid;
+  background: color-mix(in oklab, var(--accent-bg) 12%, var(--bg));
+  font-size: 14px;
+}
+
+.chatDirectEmpty--detail {
+  max-width: 640px;
+  text-align: left;
+  line-height: 1.55;
+}
+
+.chatDirectEmptyTitle {
+  font-size: 16px;
+  font-weight: 750;
+  color: var(--text-h);
+  margin: 0 0 10px;
+}
+
+.chatDirectEmptyMsg {
+  margin: 0 0 12px;
+  font-family: var(--mono, ui-monospace, monospace);
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in oklab, tomato 8%, var(--code-bg));
+  color: var(--text-h);
+  word-break: break-word;
+}
+
+.chatDirectEmptyHint {
+  margin: 0 0 14px;
+  font-size: 14px;
+  opacity: 0.92;
+}
+
+.chatDirectEnvList {
+  margin: 0 0 16px;
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.chatDirectEnvList code {
+  font-size: 12px;
+}
+
+/* --- Single chat UI (Chat tab) --- */
+.chatOneRoot {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.chatOneTop {
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.chatOneTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 800;
+  color: var(--text-h);
+}
+
+.chatOneIcon {
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.chatOneControls {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.chatOneLabel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 650;
+  color: var(--text-h);
+}
+
+.chatOneSelect,
+.chatOneInput {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 7px 10px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  min-width: 220px;
+}
+
+.chatOneLabel--model {
+  flex: 1 1 320px;
+  min-width: 280px;
+  max-width: 100%;
+}
+
+.chatModelPicker {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--code-bg) 55%, var(--bg));
+}
+
+.chatModelPicker--disabled {
+  opacity: 0.65;
+  pointer-events: none;
+}
+
+.chatModelPickerTop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.chatModelPickerSearch {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+}
+
+.chatModelPickerCount {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 650;
+  opacity: 0.8;
+  font-variant-numeric: tabular-nums;
+}
+
+.chatModelPickerList {
+  max-height: min(220px, 40vh);
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in oklab, var(--border) 80%, transparent);
+  background: var(--bg);
+}
+
+.chatModelPickerItem {
+  text-align: left;
+  width: 100%;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-family: var(--mono, ui-monospace, monospace);
+  color: var(--text-h);
+  background: transparent;
+  cursor: pointer;
+}
+
+.chatModelPickerItem:hover {
+  background: color-mix(in oklab, var(--accent-bg) 35%, transparent);
+}
+
+.chatModelPickerItem--active {
+  background: color-mix(in oklab, var(--accent-bg) 55%, var(--code-bg));
+  font-weight: 700;
+}
+
+.chatModelPickerEmpty {
+  padding: 12px 10px;
+  font-size: 13px;
+  opacity: 0.85;
+  line-height: 1.45;
+}
+
+.chatModelPickerCustomRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.chatModelPickerCustomBtn {
+  padding: 7px 12px !important;
+  font-size: 12px !important;
+  min-width: auto !important;
+}
+
+.chatModelPickerCustomBtn--on {
+  outline: 2px solid color-mix(in oklab, var(--accent-bg) 70%, var(--border));
+  outline-offset: 1px;
+}
+
+.chatModelPickerCustomInput {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+
+.chatOneModelRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chatOneModelRow--footer {
+  margin-top: 4px;
+  justify-content: flex-end;
+}
+
+.chatOneModelRow .chatOneSelect {
+  flex: 1 1 200px;
+  min-width: 200px;
+}
+
+.chatOneReloadModels {
+  flex: 0 0 auto;
+  padding: 7px 12px !important;
+  font-size: 12px !important;
+  min-width: auto !important;
+}
+
+.chatOneModelHint {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  margin-top: 4px;
+  max-width: 480px;
+}
+
+.chatOneModelHint--warn {
+  color: color-mix(in oklab, tomato 85%, var(--text-h));
+}
+
+.chatOneErr--banner {
+  margin: 0 0 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: color-mix(in oklab, tomato 12%, var(--bg));
+  border: 1px solid color-mix(in oklab, tomato 35%, var(--border));
+}
+
+.chatOneLog {
+  padding: 14px;
+  max-height: 52vh;
+  overflow: auto;
+  background: linear-gradient(180deg, var(--bg), color-mix(in oklab, var(--bg) 92%, black));
+}
+
+.chatOneEmpty {
+  opacity: 0.75;
+  font-size: 14px;
+}
+
+.chatOneTurn {
+  margin-bottom: 12px;
+}
+
+.chatOneMeta {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  font-size: 12px;
+  opacity: 0.85;
+  margin-bottom: 4px;
+}
+
+.chatOneRole {
+  font-weight: 800;
+  color: var(--text-h);
+}
+
+.chatOneProv {
+  font-family: var(--mono);
+}
+
+.chatOneText {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--code-bg);
+  color: var(--text-h);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chatOneTurn--user .chatOneText {
+  background: color-mix(in oklab, var(--accent-bg) 60%, var(--code-bg));
+}
+
+.chatOneComposer {
+  border-top: 1px solid var(--border);
+  padding: 12px 14px 14px;
+  background: var(--bg);
+}
+
+.chatOneTextarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  resize: vertical;
+  min-height: 90px;
+}
+
+.chatOneActions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.chatOneErr {
+  margin-top: 10px;
+  color: tomato;
+  font-size: 13px;
+  white-space: pre-wrap;
+}
